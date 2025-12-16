@@ -12,9 +12,6 @@ sys.path.insert(0, str(src_dir))
 __version__ = "1.1.0"
 
 from PyQt6.QtWidgets import QApplication, QMessageBox
-from version_checker import VersionChecker, PythonVersion
-from downloader import Downloader, DownloadError
-from installer import Installer, InstallError
 
 # 多重起動防止用のミューテックス名
 MUTEX_NAME = "PythonAutoUpdate_SingleInstance_Mutex"
