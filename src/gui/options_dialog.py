@@ -35,7 +35,7 @@ class OptionsDialog(QDialog):
     def _setup_ui(self) -> None:
         """UIをセットアップ"""
         self.setWindowTitle("オプション設定")
-        self.setFixedSize(450, 400)
+        self.setFixedSize(450, 480)
         self.setWindowFlags(
             Qt.WindowType.Dialog |
             Qt.WindowType.WindowCloseButtonHint
@@ -149,6 +149,8 @@ class OptionsDialog(QDialog):
             #settingsCheckbox {
                 font-size: 13px;
                 spacing: 8px;
+                min-height: 28px;
+                padding: 4px 0px;
             }
             #settingsCheckbox::indicator {
                 width: 18px;
@@ -167,11 +169,13 @@ class OptionsDialog(QDialog):
             #settingsLabel {
                 font-size: 13px;
                 color: #94A3B8;
+                min-height: 24px;
             }
             #warningLabel {
                 font-size: 11px;
                 color: #FBBF24;
                 margin-top: 5px;
+                min-height: 20px;
             }
             #timeEdit {
                 background-color: #1E293B;
@@ -181,6 +185,7 @@ class OptionsDialog(QDialog):
                 font-size: 14px;
                 color: #E0F2FE;
                 min-width: 100px;
+                min-height: 28px;
             }
             #timeEdit:disabled {
                 color: #64748B;

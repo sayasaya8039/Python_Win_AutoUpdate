@@ -125,9 +125,10 @@ class MainWindow(QMainWindow):
         # バージョン情報エリア
         version_widget = QWidget()
         version_widget.setObjectName("versionWidget")
+        version_widget.setFixedHeight(100)
         version_layout = QVBoxLayout(version_widget)
-        version_layout.setContentsMargins(20, 20, 20, 20)
-        version_layout.setSpacing(15)
+        version_layout.setContentsMargins(20, 15, 20, 15)
+        version_layout.setSpacing(10)
 
         # インストール済みバージョン
         installed_layout = QHBoxLayout()
