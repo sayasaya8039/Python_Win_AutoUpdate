@@ -1,18 +1,21 @@
 """メインウィンドウ（スタンドアロン実行用）"""
 
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
-from PyQt6.QtGui import QFont, QIcon
+from PyQt6.QtGui import QAction, QIcon
 from PyQt6.QtWidgets import (
     QApplication,
     QHBoxLayout,
     QLabel,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QProgressBar,
     QPushButton,
+    QSystemTrayIcon,
     QVBoxLayout,
     QWidget,
 )
@@ -21,8 +24,11 @@ from PyQt6.QtWidgets import (
 from version_checker import VersionChecker, PythonVersion
 from downloader import Downloader, DownloadError
 from installer import Installer, InstallError
+from settings_manager import SettingsManager
+from scheduler import UpdateScheduler
+from gui.options_dialog import OptionsDialog
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
 
 class CheckVersionThread(QThread):
@@ -77,20 +83,25 @@ class MainWindow(QMainWindow):
         self.checker = VersionChecker()
         self.downloader = Downloader()
         self.installer = Installer()
+        self.settings_manager = SettingsManager()
+        self.scheduler = UpdateScheduler(self)
 
         self._installed_version: Optional[PythonVersion] = None
         self._latest_version: Optional[PythonVersion] = None
         self._download_url: Optional[str] = None
         self._check_thread: Optional[CheckVersionThread] = None
         self._download_thread: Optional[DownloadThread] = None
+        self._is_auto_update = False  # 自動アップデートかどうか
 
         self._setup_ui()
+        self._setup_tray()
+        self._setup_scheduler()
         self._apply_styles()
 
     def _setup_ui(self) -> None:
         """UIをセットアップ"""
         self.setWindowTitle(f"Python AutoUpdate v{__version__}")
-        self.setFixedSize(500, 400)
+        self.setFixedSize(500, 450)
         self.setWindowFlags(
             Qt.WindowType.Window |
             Qt.WindowType.WindowCloseButtonHint |
@@ -142,6 +153,12 @@ class MainWindow(QMainWindow):
 
         layout.addWidget(version_widget)
 
+        # 次回チェック予定
+        self.next_check_label = QLabel("")
+        self.next_check_label.setObjectName("nextCheckLabel")
+        self.next_check_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.next_check_label)
+
         # ステータス表示
         self.status_label = QLabel("")
         self.status_label.setObjectName("statusLabel")
@@ -173,6 +190,16 @@ class MainWindow(QMainWindow):
         button_layout.addWidget(self.update_button)
 
         layout.addLayout(button_layout)
+
+        # オプションボタン
+        options_layout = QHBoxLayout()
+        self.options_button = QPushButton("オプション設定")
+        self.options_button.setObjectName("optionsButton")
+        self.options_button.clicked.connect(self._show_options)
+        options_layout.addWidget(self.options_button)
+        options_layout.addStretch()
+        layout.addLayout(options_layout)
+
         layout.addStretch()
 
         # フッター（バージョン表示）
@@ -180,6 +207,53 @@ class MainWindow(QMainWindow):
         footer_label.setObjectName("footerLabel")
         footer_label.setAlignment(Qt.AlignmentFlag.AlignRight)
         layout.addWidget(footer_label)
+
+    def _setup_tray(self) -> None:
+        """システムトレイをセットアップ"""
+        self.tray_icon = QSystemTrayIcon(self)
+
+        # トレイメニュー
+        tray_menu = QMenu()
+
+        show_action = QAction("表示", self)
+        show_action.triggered.connect(self._show_window)
+        tray_menu.addAction(show_action)
+
+        check_action = QAction("今すぐチェック", self)
+        check_action.triggered.connect(self._check_for_updates)
+        tray_menu.addAction(check_action)
+
+        tray_menu.addSeparator()
+
+        options_action = QAction("オプション設定", self)
+        options_action.triggered.connect(self._show_options)
+        tray_menu.addAction(options_action)
+
+        tray_menu.addSeparator()
+
+        quit_action = QAction("終了", self)
+        quit_action.triggered.connect(self._quit_app)
+        tray_menu.addAction(quit_action)
+
+        self.tray_icon.setContextMenu(tray_menu)
+        self.tray_icon.activated.connect(self._on_tray_activated)
+
+        # トレイアイコンを表示
+        self.tray_icon.setToolTip("Python AutoUpdate")
+        self.tray_icon.show()
+
+    def _setup_scheduler(self) -> None:
+        """スケジューラーをセットアップ"""
+        settings = self.settings_manager.settings
+
+        self.scheduler.set_scheduled_time(settings.scheduled_time)
+        self.scheduler.set_last_check_date(settings.last_check_date)
+        self.scheduler.scheduled_check_triggered.connect(self._on_scheduled_check)
+        self.scheduler.next_check_updated.connect(self._update_next_check_label)
+
+        if settings.auto_update_enabled:
+            self.scheduler.start()
+            self._update_next_check_label(self.scheduler.next_check_datetime.strftime("%Y-%m-%d %H:%M") if self.scheduler.next_check_datetime else "")
 
     def _apply_styles(self) -> None:
         """スタイルを適用"""
@@ -210,6 +284,10 @@ class MainWindow(QMainWindow):
                 font-size: 16px;
                 font-weight: bold;
                 color: #E0F2FE;
+            }
+            #nextCheckLabel {
+                font-size: 12px;
+                color: #64748B;
             }
             #statusLabel {
                 font-size: 14px;
@@ -256,6 +334,17 @@ class MainWindow(QMainWindow):
                 background-color: #475569;
                 color: #94A3B8;
             }
+            #optionsButton {
+                background-color: transparent;
+                color: #64748B;
+                font-size: 12px;
+                padding: 8px 16px;
+                border: 1px solid #475569;
+            }
+            #optionsButton:hover {
+                color: #94A3B8;
+                border-color: #64748B;
+            }
             #footerLabel {
                 font-size: 11px;
                 color: #64748B;
@@ -278,13 +367,67 @@ class MainWindow(QMainWindow):
     def showEvent(self, event) -> None:
         """ウィンドウ表示時に自動でバージョンチェック"""
         super().showEvent(event)
+        if not self._check_thread or not self._check_thread.isRunning():
+            self._check_for_updates()
+
+    def _show_window(self) -> None:
+        """ウィンドウを表示"""
+        self.show()
+        self.activateWindow()
+        self.raise_()
+
+    def _show_options(self) -> None:
+        """オプション設定を表示"""
+        dialog = OptionsDialog(self.settings_manager, self)
+        dialog.settings_changed.connect(self._on_settings_changed)
+        dialog.exec()
+
+    def _on_settings_changed(self) -> None:
+        """設定が変更された時"""
+        settings = self.settings_manager.settings
+
+        self.scheduler.set_scheduled_time(settings.scheduled_time)
+
+        if settings.auto_update_enabled:
+            self.scheduler.start()
+        else:
+            self.scheduler.stop()
+            self.next_check_label.setText("")
+
+        self._update_next_check_label(
+            self.scheduler.next_check_datetime.strftime("%Y-%m-%d %H:%M")
+            if self.scheduler.next_check_datetime else ""
+        )
+
+    def _update_next_check_label(self, next_check: str) -> None:
+        """次回チェック予定を更新"""
+        if next_check:
+            self.next_check_label.setText(f"次回自動チェック: {next_check}")
+        else:
+            self.next_check_label.setText("")
+
+    def _on_scheduled_check(self) -> None:
+        """定時チェックがトリガーされた時"""
+        self._is_auto_update = True
+
+        # 最終チェック日を保存
+        today = datetime.now().strftime("%Y-%m-%d")
+        self.settings_manager.set_last_check_date(today)
+
+        # バージョンチェック開始
         self._check_for_updates()
+
+    def _on_tray_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
+        """トレイアイコンがアクティブになった時"""
+        if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
+            self._show_window()
 
     def _check_for_updates(self) -> None:
         """バージョンチェックを開始"""
         self.check_button.setEnabled(False)
         self.update_button.setEnabled(False)
         self.status_label.setText("バージョンを確認しています...")
+        self.status_label.setStyleSheet("color: #94A3B8;")
         self.installed_label.setText("確認中...")
         self.latest_label.setText("確認中...")
 
@@ -319,12 +462,27 @@ class MainWindow(QMainWindow):
             self.status_label.setText("新しいバージョンが利用可能です！")
             self.status_label.setStyleSheet("color: #34D399;")
             self.update_button.setEnabled(True)
+
+            # 自動インストールが有効で、自動チェックの場合
+            if self._is_auto_update and self.settings_manager.settings.auto_install_enabled:
+                self._is_auto_update = False
+                self._start_auto_update()
+            else:
+                # トレイ通知
+                self.tray_icon.showMessage(
+                    "Python AutoUpdate",
+                    f"新しいバージョン Python {latest.version_string} が利用可能です",
+                    QSystemTrayIcon.MessageIcon.Information,
+                    5000
+                )
         elif installed and latest:
             self.status_label.setText("最新バージョンを使用しています")
             self.status_label.setStyleSheet("color: #94A3B8;")
         else:
             self.status_label.setText("バージョン情報を取得できませんでした")
             self.status_label.setStyleSheet("color: #F87171;")
+
+        self._is_auto_update = False
 
     def _on_check_error(self, error: str) -> None:
         """バージョンチェックエラー時"""
@@ -333,9 +491,10 @@ class MainWindow(QMainWindow):
         self.status_label.setStyleSheet("color: #F87171;")
         self.installed_label.setText("不明")
         self.latest_label.setText("取得失敗")
+        self._is_auto_update = False
 
     def _start_update(self) -> None:
-        """アップデートを開始"""
+        """アップデートを開始（手動）"""
         if not self._latest_version or not self._download_url:
             return
 
@@ -349,6 +508,21 @@ class MainWindow(QMainWindow):
 
         if reply != QMessageBox.StandardButton.Yes:
             return
+
+        self._start_download()
+
+    def _start_auto_update(self) -> None:
+        """自動アップデートを開始"""
+        if not self._latest_version or not self._download_url:
+            return
+
+        # トレイ通知
+        self.tray_icon.showMessage(
+            "Python AutoUpdate",
+            f"Python {self._latest_version.version_string} の自動インストールを開始します",
+            QSystemTrayIcon.MessageIcon.Information,
+            3000
+        )
 
         self._start_download()
 
@@ -392,11 +566,11 @@ class MainWindow(QMainWindow):
                 self.status_label.setText("インストーラーが起動しました")
                 self.status_label.setStyleSheet("color: #34D399;")
 
-                QMessageBox.information(
-                    self,
-                    "インストール",
-                    "Pythonインストーラーが起動しました。\n"
-                    "インストール完了後、このツールを再起動して確認してください。"
+                self.tray_icon.showMessage(
+                    "Python AutoUpdate",
+                    "Pythonインストーラーが起動しました",
+                    QSystemTrayIcon.MessageIcon.Information,
+                    3000
                 )
             else:
                 self.status_label.setText("インストーラーの起動に失敗しました")
@@ -417,6 +591,32 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event) -> None:
         """ウィンドウを閉じる時"""
+        # トレイに最小化する設定の場合
+        if self.settings_manager.settings.minimize_to_tray:
+            event.ignore()
+            self.hide()
+            self.tray_icon.showMessage(
+                "Python AutoUpdate",
+                "トレイに最小化しました",
+                QSystemTrayIcon.MessageIcon.Information,
+                2000
+            )
+            return
+
+        self._cleanup_and_quit()
+        super().closeEvent(event)
+
+    def _quit_app(self) -> None:
+        """アプリを終了"""
+        self._cleanup_and_quit()
+        QApplication.quit()
+
+    def _cleanup_and_quit(self) -> None:
+        """クリーンアップして終了"""
+        # スケジューラーを停止
+        self.scheduler.stop()
+
+        # スレッドを停止
         if self._check_thread and self._check_thread.isRunning():
             self._check_thread.quit()
             self._check_thread.wait()
@@ -426,4 +626,5 @@ class MainWindow(QMainWindow):
             self._download_thread.quit()
             self._download_thread.wait()
 
-        super().closeEvent(event)
+        # トレイアイコンを非表示
+        self.tray_icon.hide()

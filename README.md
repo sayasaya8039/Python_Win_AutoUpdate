@@ -8,6 +8,9 @@ Windows用Python自動アップデートツール
 - Python公式サイトから最新バージョン情報を取得
 - 新しいバージョンが利用可能な場合に通知
 - ワンクリックでダウンロード・インストール
+- **定時自動チェック機能** - 毎日指定時刻に自動でバージョンチェック
+- **自動インストール機能** - 新バージョンを自動でダウンロード・インストール
+- **システムトレイ常駐** - バックグラウンドで動作
 
 ## 使い方
 
@@ -16,12 +19,15 @@ Windows用Python自動アップデートツール
 3. 新しいバージョンがある場合、「アップデート」ボタンが有効になります
 4. 「アップデート」をクリックしてインストール
 
-## スクリーンショット
+### オプション設定
 
-アプリは以下の情報を表示します：
-- インストール済みPythonバージョン
-- 最新の利用可能なバージョン
-- アップデートのステータス
+「オプション設定」ボタンから以下の設定が可能:
+
+- **定時チェック**: 毎日指定時刻に自動でバージョンチェック
+- **自動インストール**: 新バージョン検出時に自動でインストール
+- **トレイ最小化**: 閉じるボタンでトレイに最小化
+- **最小化起動**: 起動時にトレイに最小化
+- **自動起動**: Windows起動時に自動起動
 
 ## 技術仕様
 
@@ -47,16 +53,19 @@ pyinstaller --onefile --noconsole --name Python_AutoUpdate --distpath "./Python_
 ```
 Python_Win_AutoUpdate/
 ├── src/
-│   ├── __init__.py          # バージョン情報
-│   ├── version_checker.py   # バージョンチェック機能
-│   ├── downloader.py        # ダウンロード機能
-│   ├── installer.py         # インストール機能
+│   ├── __init__.py              # バージョン情報
+│   ├── version_checker.py       # バージョンチェック機能
+│   ├── downloader.py            # ダウンロード機能
+│   ├── installer.py             # インストール機能
+│   ├── settings_manager.py      # 設定管理
+│   ├── scheduler.py             # スケジューラー
 │   └── gui/
-│       └── main_window_standalone.py  # メインウィンドウ
-├── run.py                   # エントリーポイント
-├── requirements.txt         # 依存関係
-├── pyproject.toml          # プロジェクト設定
-└── Python_AutoUpdate/      # ビルド出力
+│       ├── main_window_standalone.py  # メインウィンドウ
+│       └── options_dialog.py          # オプション設定画面
+├── run.py                       # エントリーポイント
+├── requirements.txt             # 依存関係
+├── pyproject.toml              # プロジェクト設定
+└── Python_AutoUpdate/          # ビルド出力
     └── Python_AutoUpdate.exe
 ```
 
@@ -66,4 +75,4 @@ MIT License
 
 ## バージョン
 
-v1.0.0
+v1.1.0
