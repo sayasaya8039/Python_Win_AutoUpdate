@@ -1,11 +1,12 @@
 """メインウィンドウ（スタンドアロン実行用）"""
 
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
-from PyQt6.QtGui import QAction, QIcon
+from PyQt6.QtGui import QAction, QIcon, QPixmap
 from PyQt6.QtWidgets import (
     QApplication,
     QHBoxLayout,
@@ -29,6 +30,18 @@ from scheduler import UpdateScheduler
 from gui.options_dialog import OptionsDialog
 
 __version__ = "1.1.0"
+
+
+def get_icon_path() -> Path:
+    """アイコンファイルのパスを取得"""
+    if getattr(sys, 'frozen', False):
+        # PyInstallerでビルドされた場合
+        base_path = Path(sys.executable).parent
+    else:
+        # 開発環境
+        base_path = Path(__file__).parent.parent.parent / "Python_AutoUpdate"
+
+    return base_path / "icon.ico"
 
 
 class CheckVersionThread(QThread):
@@ -93,14 +106,25 @@ class MainWindow(QMainWindow):
         self._download_thread: Optional[DownloadThread] = None
         self._is_auto_update = False  # 自動アップデートかどうか
 
+        # アイコンを設定
+        self._app_icon = self._load_icon()
+
         self._setup_ui()
         self._setup_tray()
         self._setup_scheduler()
         self._apply_styles()
 
+    def _load_icon(self) -> QIcon:
+        """アプリアイコンを読み込み"""
+        icon_path = get_icon_path()
+        if icon_path.exists():
+            return QIcon(str(icon_path))
+        return QIcon()
+
     def _setup_ui(self) -> None:
         """UIをセットアップ"""
         self.setWindowTitle(f"Python AutoUpdate v{__version__}")
+        self.setWindowIcon(self._app_icon)
         self.setFixedSize(500, 450)
         self.setWindowFlags(
             Qt.WindowType.Window |
@@ -212,6 +236,7 @@ class MainWindow(QMainWindow):
     def _setup_tray(self) -> None:
         """システムトレイをセットアップ"""
         self.tray_icon = QSystemTrayIcon(self)
+        self.tray_icon.setIcon(self._app_icon)
 
         # トレイメニュー
         tray_menu = QMenu()
@@ -502,7 +527,8 @@ class MainWindow(QMainWindow):
         reply = QMessageBox.question(
             self,
             "確認",
-            f"Python {self._latest_version.version_string} をダウンロードしてインストールしますか？",
+            f"Python {self._latest_version.version_string} をダウンロードしてインストールしますか？\n\n"
+            "※ インストール時は「Add Python to PATH」にチェックを入れてください",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.Yes
         )

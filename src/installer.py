@@ -157,11 +157,12 @@ class Installer:
         """
         try:
             # ShellExecuteを使用して管理者権限で実行
+            # GUIを表示してユーザーが「Add Python to PATH」を確認できるようにする
             result = ctypes.windll.shell32.ShellExecuteW(
                 None,
                 "runas",
                 str(installer_path),
-                "/passive PrependPath=1 Include_launcher=1",
+                "",  # オプションなし = 通常のGUIインストーラー
                 None,
                 1  # SW_SHOWNORMAL
             )
