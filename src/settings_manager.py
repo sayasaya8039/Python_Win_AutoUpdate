@@ -14,6 +14,7 @@ class AppSettings:
     auto_update_enabled: bool = False
     scheduled_time: str = "09:00"  # HH:MM形式
     auto_install_enabled: bool = False  # 自動インストールのON/OFF
+    include_prerelease: bool = False  # プレリリース版を表示
 
     # 一般設定
     minimize_to_tray: bool = True
@@ -86,6 +87,11 @@ class SettingsManager:
     def set_auto_install(self, enabled: bool) -> None:
         """自動インストールの有効/無効を設定"""
         self._settings.auto_install_enabled = enabled
+        self.save_settings()
+
+    def set_include_prerelease(self, enabled: bool) -> None:
+        """プレリリース版の表示設定"""
+        self._settings.include_prerelease = enabled
         self.save_settings()
 
     def set_last_check_date(self, date_str: str) -> None:
